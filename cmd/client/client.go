@@ -1,0 +1,29 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+)
+
+var target = flag.String("target", "http://localhost:8090", "request target")
+
+func main() {
+	flag.Parse()
+	client := new(http.Client)
+	client.Timeout = 10 * time.Second
+
+	for range time.Tick(100 * time.Millisecond) {
+		go func() {
+			resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", *target))
+			fmt.Println(resp.Header.Get("lb-from"))
+			if err == nil {
+				log.Printf("response %d", resp.StatusCode)
+			} else {
+				log.Printf("error %s", err)
+			}
+		}()
+	}
+}
