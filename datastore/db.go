@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 )
 
-var segments []Db
+//var segments []Db
 
 const currentFile = "current-data"
 const outFileName = "segment-"
@@ -21,15 +22,29 @@ var ErrNotFound = fmt.Errorf("record does not exist")
 
 type hashIndex map[string]int64
 
-type Db struct {
+var queue = make(chan entryWithResp)
+
+type entryWithResp struct {
+	e        entry
+	response chan error
+}
+
+type Segment struct {
 	out       *os.File
 	outPath   string
 	outOffset int64
-
-	index hashIndex
+	index     hashIndex
 }
 
-//outFileName+strconv.Itoa(len(segments)+1
+type Db struct {
+	mu        sync.RWMutex
+	out       *os.File
+	outPath   string
+	outOffset int64
+	segments  []Segment
+	index     hashIndex
+}
+
 func NewDb(filename, dir string) (*Db, error) {
 	outputPath := filepath.Join(dir, filename)
 	f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
@@ -46,21 +61,37 @@ func NewDb(filename, dir string) (*Db, error) {
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
+
+	go func() {
+
+		for el := range queue {
+			fmt.Println(el.e)
+			db.mu.Lock()
+			err := db.putIntoDataBase(el.e)
+			db.mu.Unlock()
+			if err != nil {
+				el.response <- err
+			}
+
+			el.response <- nil
+		}
+	}()
+
 	return db, nil
 }
 
-func mergeSegments() error {
-	var segmentsMerged []Db
-	mergedDb, err := NewDb(outFileName+strconv.Itoa(len(segments)+1), tempDir)
+func (db *Db) mergeSegments() error {
+	var segmentsMerged []Segment
+	mergedDb, err := NewDb(outFileName+strconv.Itoa(len(db.segments)+1), tempDir)
 	mergedDb.outOffset = 0
 	if err != nil {
 		return err
 	}
-	for _, el := range segments {
+	for _, el := range db.segments {
 		for key := range el.index {
-			segIndex, position, ok := getLastFromSegments(key)
+			segIndex, position, ok := db.getLastFromSegments(key)
 			if segIndex != nil && ok {
-				file, err := os.Open(segments[*segIndex].outPath)
+				file, err := os.Open(db.segments[*segIndex].outPath)
 				if err != nil {
 					return err
 				}
@@ -81,8 +112,9 @@ func mergeSegments() error {
 				encoded := e.Encode()
 				if int(mergedDb.outOffset)+len(encoded) > bufSize {
 					mergedDb.Close()
-					segmentsMerged = append(segmentsMerged, *mergedDb)
-					mergedDb, err = NewDb(outFileName+strconv.Itoa(len(segments)+1+len(segmentsMerged)), tempDir)
+					newSeg := createNewSegment(mergedDb.out, mergedDb.outPath, int(mergedDb.outOffset), mergedDb.index)
+					segmentsMerged = append(segmentsMerged, newSeg)
+					mergedDb, err = NewDb(outFileName+strconv.Itoa(len(db.segments)+1+len(segmentsMerged)), tempDir)
 					if err != nil {
 						return err
 					}
@@ -96,9 +128,9 @@ func mergeSegments() error {
 				file.Close()
 			}
 			for i := 0; i <= *segIndex; i++ {
-				_, ok := segments[i].index[key]
+				_, ok := db.segments[i].index[key]
 				if ok {
-					delete(segments[i].index, key)
+					delete(db.segments[i].index, key)
 				}
 			}
 		}
@@ -106,24 +138,26 @@ func mergeSegments() error {
 			os.Remove(el.outPath)
 		}
 	}
-	mergedDb.Close()
-	segments = append(segmentsMerged, *mergedDb)
-	for i, el := range segments {
+	newSeg := createNewSegment(mergedDb.out, mergedDb.outPath, int(mergedDb.outOffset), mergedDb.index)
+	newSeg.out.Close()
+	db.segments = append(segmentsMerged, newSeg)
+
+	for i, el := range db.segments {
 		err := os.Rename(el.outPath, tempDir+`\`+outFileName+strconv.Itoa(i+1))
 		if err != nil {
 			return err
 		}
-		segments[i].outPath = tempDir + `\` + outFileName + strconv.Itoa(i+1)
+		db.segments[i].outPath = tempDir + `\` + outFileName + strconv.Itoa(i+1)
 	}
 	return nil
 }
 
-func getLastFromSegments(key string) (*int, int64, bool) {
+func (db *Db) getLastFromSegments(key string) (*int, int64, bool) {
 	var currentSegment *int
-	i := len(segments) - 1
+	i := len(db.segments) - 1
 	for i >= 0 {
 		currentSegment = &i
-		position, ok := segments[i].index[key]
+		position, ok := db.segments[i].index[key]
 		if ok {
 			return currentSegment, position, ok
 
@@ -186,20 +220,22 @@ func (db *Db) Close() error {
 }
 
 func (db *Db) Get(key string) (string, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	var currentSegment *int
 	var file *os.File
 	var err error
 
 	position, ok := db.index[key]
 	if !ok {
-		currentSegment, position, ok = getLastFromSegments(key)
+		currentSegment, position, ok = db.getLastFromSegments(key)
 		if !ok {
 			return "", ErrNotFound
 		}
 	}
 
 	if currentSegment != nil {
-		file, err = os.Open(segments[*currentSegment].outPath)
+		file, err = os.Open(db.segments[*currentSegment].outPath)
 	} else {
 		file, err = os.Open(db.outPath)
 	}
@@ -222,31 +258,65 @@ func (db *Db) Get(key string) (string, error) {
 	return value, nil
 }
 
-func (db *Db) Put(key, value string) (*Db, error) {
-	e := entry{
+func (db *Db) Put(key, value string) error {
+	en := entry{
 		key:   key,
 		value: value,
 	}
+
+	i := entryWithResp{
+		e:        en,
+		response: make(chan error),
+	}
+
+	queue <- i
+	return <-i.response
+}
+
+func (db *Db) putIntoDataBase(e entry) error {
 	encoded := e.Encode()
+
 	if int(db.outOffset)+len(encoded) > bufSize {
 		db.Close()
-		err := os.Rename(db.outPath, tempDir+`\`+outFileName+strconv.Itoa(len(segments)+1))
+		err := os.Rename(db.outPath, tempDir+`\`+outFileName+strconv.Itoa(len(db.segments)+1))
 		if err != nil {
-			return nil, err
+			return err
 		}
-		db.outPath = tempDir + `\` + outFileName + strconv.Itoa(len(segments)+1)
-		segments = append(segments, *db)
-		db, err = NewDb(currentFile, tempDir)
+		db.outPath = tempDir + `\` + outFileName + strconv.Itoa(len(db.segments)+1)
+		newSeg := createNewSegment(db.out, db.outPath, int(db.outOffset), db.index)
+		newSeg.out.Close()
+
+		db.segments = append(db.segments, newSeg)
+
+		outputPath := filepath.Join(tempDir, currentFile)
+		f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+
+		db.out = f
+		db.outOffset = 0
+		db.index = make(hashIndex)
+		db.outPath = outputPath
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	n, err := db.out.Write(e.Encode())
 	if err == nil {
-		db.index[key] = db.outOffset
+		db.index[e.key] = db.outOffset
 		db.outOffset += int64(n)
-		return db, nil
+		return nil
 	}
-	return nil, err
+
+	return err
+}
+
+func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIndex) Segment {
+	newSeg := &Segment{
+		out:       outF,
+		outPath:   outPath,
+		outOffset: int64(outOffset),
+		index:     index,
+	}
+
+	return *newSeg
 }

@@ -35,16 +35,9 @@ func TestDb_Put(t *testing.T) {
 
 	t.Run("put/get", func(t *testing.T) {
 		for _, pair := range pairs {
-			newDb, err := db.Put(pair[0], pair[1])
+			err := db.Put(pair[0], pair[1])
 			if err != nil {
 				t.Errorf("Cannot put %s: %s", pairs[0], err)
-			}
-			if newDb != nil {
-				outFile, err = os.Open(filepath.Join(dir, currentFile))
-				if err != nil {
-					t.Errorf("Cannot put %s: %s", pairs[0], err)
-				}
-				db = newDb
 			}
 			value, err := db.Get(pair[0])
 			if err != nil {
@@ -65,16 +58,9 @@ func TestDb_Put(t *testing.T) {
 
 	t.Run("file growth", func(t *testing.T) {
 		for _, pair := range pairs {
-			newDb, err := db.Put(pair[0], pair[1])
+			err := db.Put(pair[0], pair[1])
 			if err != nil {
 				t.Errorf("Cannot put %s: %s", pairs[0], err)
-			}
-			if newDb != nil {
-				outFile, err = os.Open(filepath.Join(dir, currentFile))
-				if err != nil {
-					t.Errorf("Cannot put %s: %s", pairs[0], err)
-				}
-				db = newDb
 			}
 		}
 		outInfo, err := outFile.Stat()
@@ -145,16 +131,13 @@ func TestDB_Segmentation(t *testing.T) {
 	t.Run("test segmentation", func(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			for _, pair := range pairs {
-				newDb, err := db.Put(pair[0], pair[1])
+				err := db.Put(pair[0], pair[1])
 				if err != nil {
 					t.Errorf("Cannot put %s: %s", pairs[0], err)
 				}
-				if newDb != nil {
-					db = newDb
-				}
 			}
 		}
-		numOfSegs := len(segments)
+		numOfSegs := len(db.segments)
 		if numOfSegs != 5 {
 			t.Errorf("Wrong number of segments: %d", numOfSegs)
 		}
@@ -171,12 +154,12 @@ func TestDB_Segmentation(t *testing.T) {
 
 	t.Run("check merge", func(t *testing.T) {
 
-		err := mergeSegments()
+		err := db.mergeSegments()
 		if err != nil {
 			t.Errorf("Error while merging: %s", err)
 		}
-		if len(segments) != 2 {
-			t.Errorf("Wrong number of segments: %d, expected %d", len(segments), 1)
+		if len(db.segments) != 2 {
+			t.Errorf("Wrong number of segments: %d, expected %d", len(db.segments), 1)
 		}
 
 		value, err := db.Get("key3")
