@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPI-KMD/lab2-term2/httptools"
-	"github.com/KPI-KMD/lab2-term2/signal"
+	"github.com/KPI-KMD/lab3-term2/httptools"
+	"github.com/KPI-KMD/lab3-term2/signal"
 )
 
 

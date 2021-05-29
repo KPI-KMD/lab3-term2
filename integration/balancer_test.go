@@ -49,6 +49,6 @@ func(s *MySuite) TestBalancer(c *gocheck.C) {
 
 func(s *MySuite) BenchmarkBalancer(c *gocheck.C) {
 	for i := 0; i < c.N; i++ {
-		client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+		client.Get(fmt.Sprintf("%s/api/v1/some-data?key=ovgb", baseAddress))
 	}
 }

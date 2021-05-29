@@ -1,17 +1,21 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/KPI-KMD/lab2-term2/httptools"
-	"github.com/KPI-KMD/lab2-term2/signal"
+	"github.com/KPI-KMD/lab3-term2/httptools"
+	"github.com/KPI-KMD/lab3-term2/signal"
 )
 var port = flag.Int("port", 8080, "server port")
+var db = flag.String("db", "http://database:8070/db/", "database url")
 
 const confResponseDelaySec = "CONF_RESPONSE_DELAY_SEC"
 const confHealthFailure = "CONF_HEALTH_FAILURE"
@@ -40,17 +44,61 @@ func main() {
 		}
 
 		report.Process(r)
-
+		k, ok := r.URL.Query()["key"]
 		rw.Header().Set("content-type", "application/json")
+		if !ok || len(k[0]) < 1 {
+			rw.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		v, err := http.Get(*db + k[0])
+		if err != nil {
+			log.Printf("Failed to get data from db: %s", err)
+			rw.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer v.Body.Close()
+
+		if v.StatusCode != http.StatusOK {
+			if v.StatusCode == http.StatusNotFound {
+				rw.WriteHeader(http.StatusNotFound)
+			} else {
+				rw.WriteHeader(http.StatusInternalServerError)
+			}
+
+			return
+		}
+
+		b, err := ioutil.ReadAll(v.Body)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Failed to read response body: %s", err)
+			return
+		}
 		rw.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(rw).Encode([]string{
-			"1", "2",
-		})
+		if _, err = rw.Write(b); err != nil {
+			log.Printf("Failed to write response body: %s", err)
+		}
 	})
 
 	h.Handle("/report", report)
 
 	server := httptools.CreateServer(*port, h)
+	t := time.Now().Format("2006-01-02")
+	body := []byte(fmt.Sprintf(`{"value": "%s"}`, t))
+	r, err := http.Post(
+		*db + "ovgb",
+		"application/json",
+		bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to upload current time to database: %s", err)
+	}
+
+	if r.StatusCode != http.StatusOK {
+		log.Printf("Failed to upload current time to database: %s", r.Status)
+	}
+
+	log.Print("Date uploaded")
 	server.Start()
 	signal.WaitForTerminationSignal()
 }
