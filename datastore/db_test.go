@@ -2,8 +2,10 @@ package datastore
 
 import (
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -138,7 +140,7 @@ func TestDB_Segmentation(t *testing.T) {
 			}
 		}
 		numOfSegs := len(db.segments)
-		if numOfSegs != 5 {
+		if numOfSegs != 7 {
 			t.Errorf("Wrong number of segments: %d", numOfSegs)
 		}
 
@@ -158,7 +160,7 @@ func TestDB_Segmentation(t *testing.T) {
 		if err != nil {
 			t.Errorf("Error while merging: %s", err)
 		}
-		if len(db.segments) != 2 {
+		if len(db.segments) != 3 {
 			t.Errorf("Wrong number of segments: %d, expected %d", len(db.segments), 2)
 		}
 
@@ -170,5 +172,62 @@ func TestDB_Segmentation(t *testing.T) {
 			t.Errorf("Bad value returned expected %s, got %s", "value3", value)
 		}
 
+	})
+}
+
+func TestDb_PutGetInt64(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	tempDir = dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := NewDb(currentFile, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	pairsInt64 := [][]string{
+		{"key1", "111"},
+		{"key2", "222"},
+		{"key3", "333"},
+	}
+	pairsNotInt64 := [][]string{
+		{"key5", "dsawqe"},
+		{"key6", "dsazx"},
+		{"key7", "ewq"},
+	}
+
+	t.Run("putInt64/getInt64", func(t *testing.T) {
+
+		for _, pair := range pairsInt64 {
+			val, err := strconv.ParseInt(pair[1], 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = db.PutInt64(pair[0], val)
+			if err != nil {
+				t.Errorf("Cannot put %s: %s", pair[0], err)
+			}
+			value, err := db.GetInt64(pair[0])
+			if err != nil {
+				t.Errorf("Cannot get %s: %s", pair[0], err)
+			}
+			if value != val {
+				t.Errorf("Bad value returned expected %s, got %s", pair[1], strconv.FormatInt(value, 10))
+			}
+		}
+	})
+
+	t.Run("getInt64wrongtype", func(t *testing.T) {
+
+		notForInt64pair := pairsNotInt64[0]
+		res, err := db.GetInt64(notForInt64pair[0])
+		if err == nil {
+			t.Errorf("Expected error for key %s, but got %s", notForInt64pair[0], strconv.FormatInt(res, 10))
+		}
 	})
 }

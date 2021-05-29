@@ -18,6 +18,7 @@ const outFileName = "segment-"
 var tempDir string
 
 var ErrNotFound = fmt.Errorf("record does not exist")
+var ErrWrongDataType = fmt.Errorf("wrong data type")
 
 type hashIndex map[string]int64
 
@@ -332,4 +333,34 @@ func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIn
 	}
 
 	return newSeg, nil
+}
+
+func (db *Db) GetInt64(key string) (int64, error) {
+	stringValue, err := db.Get(key)
+	if err != nil {
+		return 0, err
+	}
+
+	value, err := strconv.ParseInt(stringValue, 10, 64)
+	if err != nil {
+		return 0, ErrWrongDataType
+	}
+
+	return value, nil
+}
+
+func (db *Db) PutInt64(key string, value int64) error {
+	e := entry{
+		key:   key,
+		valueType: "int64",
+		value: strconv.FormatInt(value, 10),
+	}
+
+	n, err := db.out.Write(e.Encode())
+	if err == nil {
+		db.index[key] = db.outOffset
+		db.outOffset += int64(n)
+	}
+
+	return err
 }
