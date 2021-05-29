@@ -2,14 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="9520f693-e143-4325-b2e3-2231f59cd17f" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/cmd/db/main.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.bood" beforeDir="false" afterPath="$PROJECT_DIR$/build.bood" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmd/lb/balancer.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/lb/balancer.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmd/server/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/server/server.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docker-compose.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/integration/balancer_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/integration/balancer_test.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
