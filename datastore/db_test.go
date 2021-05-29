@@ -10,6 +10,7 @@ import (
 )
 
 func TestDb_Put(t *testing.T) {
+
 	dir, err := ioutil.TempDir("", "test-db")
 	tempDir = dir
 	if err != nil {
@@ -17,7 +18,7 @@ func TestDb_Put(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(currentFile, dir)
+	db, err := NewDb(currentFile, dir, 200, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestDb_Put(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = NewDb(currentFile, dir)
+		db, err = NewDb(currentFile, dir, 200, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +104,7 @@ func TestDB_Segmentation(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(currentFile, dir)
+	db, err := NewDb(currentFile, dir, 200, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,22 +155,55 @@ func TestDB_Segmentation(t *testing.T) {
 
 	})
 
-	t.Run("check merge", func(t *testing.T) {
+}
 
-		err := db.mergeSegments()
-		if err != nil {
-			t.Errorf("Error while merging: %s", err)
-		}
-		if len(db.segments) != 3 {
-			t.Errorf("Wrong number of segments: %d, expected %d", len(db.segments), 2)
-		}
+func TestDB_Merge(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-db")
+	tempDir = dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
 
-		value, err := db.Get("key3")
-		if err != nil {
-			t.Errorf("Cannot get %s: %s", pairs[0], err)
+	db, err := NewDb(currentFile, dir, 200, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer db.Close()
+
+	pairs := [][]string{
+		{"key1", "value1"},
+		{"key2", "value2"},
+		{"key3", "value3"},
+		{"key4", "value3"},
+		{"key5", "value3"},
+		{"key6", "value3"},
+		{"key7", "value3"},
+		{"key8", "value3"},
+		{"key9", "value3"},
+		{"key10", "value3"},
+		{"key11", "value3"},
+		{"key12", "value3"},
+		{"key13", "value3"},
+		{"key14", "value3"},
+		{"key15", "value3"},
+		{"key16", "value3"},
+		{"key17", "value3"},
+	}
+
+	t.Run("test merge", func(t *testing.T) {
+		for i := 0; i < 3; i++ {
+			for _, pair := range pairs {
+				err := db.Put(pair[0], pair[1])
+				if err != nil {
+					t.Errorf("Cannot put %s: %s", pairs[0], err)
+				}
+			}
 		}
-		if value != "value3" {
-			t.Errorf("Bad value returned expected %s, got %s", "value3", value)
+		numOfSegs := len(db.segments)
+		if numOfSegs != 3 {
+			t.Errorf("Wrong number of segments: %d", numOfSegs)
 		}
 
 	})
@@ -183,7 +217,7 @@ func TestDb_PutGetInt64(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	db, err := NewDb(currentFile, dir)
+	db, err := NewDb(currentFile, dir, 200, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,22 +3,24 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"github.com/KPI-KMD/lab3-term2/datastore"
-	"github.com/KPI-KMD/lab3-term2/httptools"
-	"github.com/KPI-KMD/lab3-term2/signal"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/KPI-KMD/lab3-term2/datastore"
+	"github.com/KPI-KMD/lab3-term2/httptools"
+	"github.com/KPI-KMD/lab3-term2/signal"
 )
 
 var dbDir = flag.String("dir", ".", "database directory")
 var port = flag.Int("port", 8070, "database server port")
+
 const currentFile = "current-data"
 
 func main() {
 	flag.Parse()
-	db, err := datastore.NewDb(currentFile, *dbDir)
+	db, err := datastore.NewDb(currentFile, *dbDir, 10485760, true)
 	if err != nil {
 		log.Fatalf("Failed to start database: %s", err)
 	}
@@ -48,10 +50,10 @@ func main() {
 
 					log.Printf("Got %s as int64", k)
 					res := struct {
-						Key string `json:"key"`
-						Value int64 `json:"value"`
+						Key   string `json:"key"`
+						Value int64  `json:"value"`
 					}{
-						Key: k,
+						Key:   k,
 						Value: v,
 					}
 					rw.WriteHeader(http.StatusOK)
@@ -67,10 +69,10 @@ func main() {
 
 			log.Printf("Got %s as string", k)
 			res := struct {
-				Key string `json:"key"`
+				Key   string `json:"key"`
 				Value string `json:"value"`
 			}{
-				Key: k,
+				Key:   k,
 				Value: v,
 			}
 			rw.WriteHeader(http.StatusOK)

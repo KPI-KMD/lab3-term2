@@ -17,6 +17,8 @@ const outFileName = "segment-"
 
 var tempDir string
 
+//var bufSize = 10485760
+
 var ErrNotFound = fmt.Errorf("record does not exist")
 var ErrWrongDataType = fmt.Errorf("wrong data type")
 
@@ -36,15 +38,18 @@ type Segment struct {
 
 type Db struct {
 	mu        sync.RWMutex
+	bufSize   int
 	out       *os.File
 	outPath   string
 	outOffset int64
 	segments  []Segment
 	index     hashIndex
 	queue     chan entryWithResp
+	merge     chan bool
+	mergeable bool
 }
 
-func NewDb(filename, dir string) (*Db, error) {
+func NewDb(filename, dir string, size int, mergeable bool) (*Db, error) {
 	outputPath := filepath.Join(dir, filename)
 	f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
@@ -57,6 +62,9 @@ func NewDb(filename, dir string) (*Db, error) {
 		outOffset: 0,
 		index:     make(hashIndex),
 		queue:     make(chan entryWithResp),
+		bufSize:   size,
+		merge:     make(chan bool),
+		mergeable: mergeable,
 	}
 	err = db.recover()
 	if err != nil && err != io.EOF {
@@ -74,6 +82,18 @@ func NewDb(filename, dir string) (*Db, error) {
 			}
 
 			el.response <- nil
+		}
+	}()
+
+	go func() {
+		for el := range db.merge {
+			val := el
+			if val {
+				err := db.mergeSegments()
+				if err == nil {
+					//	db.merge <- false
+				}
+			}
 		}
 	}()
 
@@ -113,7 +133,7 @@ func (db *Db) mergeSegments() error {
 					value: value,
 				}
 				encoded := e.Encode()
-				if int(mergedSegment.outOffset)+len(encoded) > bufSize {
+				if int(mergedSegment.outOffset)+len(encoded) > db.bufSize {
 					mergedSegment.out.Close()
 					segmentLength++
 					segmentsMerged = append(segmentsMerged, *mergedSegment)
@@ -171,8 +191,6 @@ func (db *Db) getLastFromSegments(key string) (*int, int64, bool) {
 	return nil, 0, false
 }
 
-const bufSize = 200
-
 func (db *Db) recover() error {
 	input, err := os.Open(db.outPath)
 	if err != nil {
@@ -180,14 +198,14 @@ func (db *Db) recover() error {
 	}
 	defer input.Close()
 
-	var buf [bufSize]byte
-	in := bufio.NewReaderSize(input, bufSize)
+	buf := make([]byte, 0, db.bufSize)
+	in := bufio.NewReaderSize(input, db.bufSize)
 	for err == nil {
 		var (
 			header, data []byte
 			n            int
 		)
-		header, err = in.Peek(bufSize)
+		header, err = in.Peek(db.bufSize)
 		if err == io.EOF {
 			if len(header) == 0 {
 				return err
@@ -197,7 +215,7 @@ func (db *Db) recover() error {
 		}
 		size := binary.LittleEndian.Uint32(header)
 
-		if size < bufSize {
+		if int(size) < db.bufSize {
 			data = buf[:size]
 		} else {
 			data = make([]byte, size)
@@ -279,7 +297,7 @@ func (db *Db) Put(key, value string) error {
 func (db *Db) putIntoDataBase(e entry) error {
 	encoded := e.Encode()
 
-	if int(db.outOffset)+len(encoded) > bufSize {
+	if int(db.outOffset)+len(encoded) > db.bufSize {
 		db.Close()
 		err := os.Rename(db.outPath, tempDir+`\`+outFileName+strconv.Itoa(len(db.segments)+1))
 		if err != nil {
@@ -301,6 +319,12 @@ func (db *Db) putIntoDataBase(e entry) error {
 		db.outOffset = 0
 		db.index = make(hashIndex)
 		db.outPath = outputPath
+
+		if len(db.segments) >= 2 && db.mergeable {
+			db.merge <- true
+
+			db.merge <- false
+		}
 		if err != nil {
 			return err
 		}
@@ -351,9 +375,9 @@ func (db *Db) GetInt64(key string) (int64, error) {
 
 func (db *Db) PutInt64(key string, value int64) error {
 	e := entry{
-		key:   key,
+		key:       key,
 		valueType: "int64",
-		value: strconv.FormatInt(value, 10),
+		value:     strconv.FormatInt(value, 10),
 	}
 
 	n, err := db.out.Write(e.Encode())
