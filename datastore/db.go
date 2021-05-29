@@ -90,8 +90,8 @@ func NewDb(filename, dir string, size int, mergeable bool) (*Db, error) {
 			val := el
 			if val {
 				err := db.mergeSegments()
-				if err == nil {
-					//	db.merge <- false
+				if err != nil {
+					fmt.Println(err)
 				}
 			}
 		}
