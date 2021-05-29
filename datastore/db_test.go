@@ -159,7 +159,7 @@ func TestDB_Segmentation(t *testing.T) {
 			t.Errorf("Error while merging: %s", err)
 		}
 		if len(db.segments) != 2 {
-			t.Errorf("Wrong number of segments: %d, expected %d", len(db.segments), 1)
+			t.Errorf("Wrong number of segments: %d, expected %d", len(db.segments), 2)
 		}
 
 		value, err := db.Get("key3")

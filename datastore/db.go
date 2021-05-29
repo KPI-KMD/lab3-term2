@@ -5,13 +5,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
 )
-
-//var segments []Db
 
 const currentFile = "current-data"
 const outFileName = "segment-"
@@ -21,8 +20,6 @@ var tempDir string
 var ErrNotFound = fmt.Errorf("record does not exist")
 
 type hashIndex map[string]int64
-
-var queue = make(chan entryWithResp)
 
 type entryWithResp struct {
 	e        entry
@@ -43,19 +40,22 @@ type Db struct {
 	outOffset int64
 	segments  []Segment
 	index     hashIndex
+	queue     chan entryWithResp
 }
 
 func NewDb(filename, dir string) (*Db, error) {
 	outputPath := filepath.Join(dir, filename)
 	f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
+
 	db := &Db{
 		outPath:   outputPath,
 		out:       f,
 		outOffset: 0,
 		index:     make(hashIndex),
+		queue:     make(chan entryWithResp),
 	}
 	err = db.recover()
 	if err != nil && err != io.EOF {
@@ -64,8 +64,7 @@ func NewDb(filename, dir string) (*Db, error) {
 
 	go func() {
 
-		for el := range queue {
-			fmt.Println(el.e)
+		for el := range db.queue {
 			db.mu.Lock()
 			err := db.putIntoDataBase(el.e)
 			db.mu.Unlock()
@@ -81,9 +80,12 @@ func NewDb(filename, dir string) (*Db, error) {
 }
 
 func (db *Db) mergeSegments() error {
+
 	var segmentsMerged []Segment
-	mergedDb, err := NewDb(outFileName+strconv.Itoa(len(db.segments)+1), tempDir)
-	mergedDb.outOffset = 0
+
+	mergedSegment, err := createNewSegment(nil, outFileName+strconv.Itoa(len(db.segments)+1), 0, make(hashIndex))
+	segmentLength := len(db.segments)
+	mergedSegment.outOffset = 0
 	if err != nil {
 		return err
 	}
@@ -110,20 +112,20 @@ func (db *Db) mergeSegments() error {
 					value: value,
 				}
 				encoded := e.Encode()
-				if int(mergedDb.outOffset)+len(encoded) > bufSize {
-					mergedDb.Close()
-					newSeg := createNewSegment(mergedDb.out, mergedDb.outPath, int(mergedDb.outOffset), mergedDb.index)
-					segmentsMerged = append(segmentsMerged, newSeg)
-					mergedDb, err = NewDb(outFileName+strconv.Itoa(len(db.segments)+1+len(segmentsMerged)), tempDir)
+				if int(mergedSegment.outOffset)+len(encoded) > bufSize {
+					mergedSegment.out.Close()
+					segmentLength++
+					segmentsMerged = append(segmentsMerged, *mergedSegment)
+					mergedSegment, err = createNewSegment(nil, outFileName+strconv.Itoa(segmentLength+1), 0, make(hashIndex))
 					if err != nil {
 						return err
 					}
 
 				}
-				n, err := mergedDb.out.Write(e.Encode())
+				n, err := mergedSegment.out.Write(e.Encode())
 				if err == nil {
-					mergedDb.index[key] = mergedDb.outOffset
-					mergedDb.outOffset += int64(n)
+					mergedSegment.index[key] = mergedSegment.outOffset
+					mergedSegment.outOffset += int64(n)
 				}
 				file.Close()
 			}
@@ -138,9 +140,8 @@ func (db *Db) mergeSegments() error {
 			os.Remove(el.outPath)
 		}
 	}
-	newSeg := createNewSegment(mergedDb.out, mergedDb.outPath, int(mergedDb.outOffset), mergedDb.index)
-	newSeg.out.Close()
-	db.segments = append(segmentsMerged, newSeg)
+	mergedSegment.out.Close()
+	db.segments = append(segmentsMerged, *mergedSegment)
 
 	for i, el := range db.segments {
 		err := os.Rename(el.outPath, tempDir+`\`+outFileName+strconv.Itoa(i+1))
@@ -149,6 +150,7 @@ func (db *Db) mergeSegments() error {
 		}
 		db.segments[i].outPath = tempDir + `\` + outFileName + strconv.Itoa(i+1)
 	}
+
 	return nil
 }
 
@@ -269,7 +271,7 @@ func (db *Db) Put(key, value string) error {
 		response: make(chan error),
 	}
 
-	queue <- i
+	db.queue <- i
 	return <-i.response
 }
 
@@ -283,10 +285,13 @@ func (db *Db) putIntoDataBase(e entry) error {
 			return err
 		}
 		db.outPath = tempDir + `\` + outFileName + strconv.Itoa(len(db.segments)+1)
-		newSeg := createNewSegment(db.out, db.outPath, int(db.outOffset), db.index)
+		newSeg, err := createNewSegment(db.out, db.outPath, int(db.outOffset), db.index)
+		if err != nil {
+			return err
+		}
 		newSeg.out.Close()
 
-		db.segments = append(db.segments, newSeg)
+		db.segments = append(db.segments, *newSeg)
 
 		outputPath := filepath.Join(tempDir, currentFile)
 		f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
@@ -310,7 +315,15 @@ func (db *Db) putIntoDataBase(e entry) error {
 	return err
 }
 
-func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIndex) Segment {
+func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIndex) (*Segment, error) {
+	if outF == nil {
+		outPath = filepath.Join(tempDir, outPath)
+		f, err := os.OpenFile(outPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		outF = f
+	}
 	newSeg := &Segment{
 		out:       outF,
 		outPath:   outPath,
@@ -318,5 +331,5 @@ func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIn
 		index:     index,
 	}
 
-	return *newSeg
+	return newSeg, nil
 }
