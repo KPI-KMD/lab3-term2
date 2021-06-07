@@ -25,6 +25,6 @@ func TestReadValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if v != "test-value" {
-		t.Errorf("Got bat value [%s]", v)
+		t.Errorf("Got bad value [%s]", v)
 	}
 }

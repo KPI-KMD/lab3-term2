@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
-	gocheck  "gopkg.in/check.v1"
+
+	gocheck "gopkg.in/check.v1"
 )
 
 const baseAddress = "http://balancer:8090"
@@ -20,17 +21,15 @@ type MySuite struct{}
 
 var _ = gocheck.Suite(&MySuite{})
 
-
-
-func(s *MySuite) TestBalancer(c *gocheck.C) {
+func (s *MySuite) TestBalancer(c *gocheck.C) {
 	// TODO: Реалізуйте інтеграційний тест для балансувальникка.
-	serverPool := []string{ "server1:8080", "server2:8080", "server3:8080", }
+	serverPool := []string{"server1:8080", "server2:8080", "server3:8080"}
 	test := make(chan string, 10)
-	
+
 	for i := 0; i < 10; i++ {
 		go func() {
 			resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
-			
+
 			if err != nil {
 				c.Error(err)
 			}
@@ -41,14 +40,14 @@ func(s *MySuite) TestBalancer(c *gocheck.C) {
 
 	}
 	for i := 0; i < 10; i++ {
-		auth := <- test
-		c.Assert(auth, gocheck.Equals, serverPool[i % 3])
+		auth := <-test
+		c.Assert(auth, gocheck.Equals, serverPool[i%3])
 	}
- 
+
 }
 
-func(s *MySuite) BenchmarkBalancer(c *gocheck.C) {
+func (s *MySuite) BenchmarkBalancer(c *gocheck.C) {
 	for i := 0; i < c.N; i++ {
-		client.Get(fmt.Sprintf("%s/api/v1/some-data?key=ovgb", baseAddress))
+		client.Get(fmt.Sprintf("%s/api/v1/some-data?key=key1", baseAddress))
 	}
 }

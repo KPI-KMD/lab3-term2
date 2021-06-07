@@ -8,7 +8,7 @@ WORKDIR /go/src/practice-2
 COPY . .
 
 #RUN CGO_ENABLED=0 bood
-RUN CGO_ENABLED=0 bood out/bin/server out/server/bood_test out/bin/lb out/server/bood_test
+RUN CGO_ENABLED=0 bood out/bin/server out/server/bood_test out/bin/lb out/server/bood_test out/bin/db 
 
 
 # ==== Final image ====

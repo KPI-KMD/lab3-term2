@@ -15,11 +15,10 @@ import (
 	"github.com/KPI-KMD/lab3-term2/signal"
 )
 
-
 var (
-	port = flag.Int("port", 8090, "load balancer port")
+	port       = flag.Int("port", 8090, "load balancer port")
 	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
-	https = flag.Bool("https", false, "whether backends support HTTPs")
+	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
 
@@ -27,14 +26,14 @@ var (
 )
 
 type server struct {
-	host string
+	host    string
 	counter int
-	status bool
+	status  bool
 }
 
 type leastConnections struct {
 	servers []*server
-	mu *sync.Mutex
+	mu      *sync.Mutex
 }
 
 func newServers(hosts []string) (*leastConnections, error) {
@@ -45,9 +44,9 @@ func newServers(hosts []string) (*leastConnections, error) {
 	servers := make([]*server, len(hosts))
 	for index := range servers {
 		servers[index] = &server{
-			host: hosts[index],
+			host:    hosts[index],
 			counter: 0,
-			status: true,
+			status:  true,
 		}
 	}
 
@@ -59,7 +58,7 @@ func newServers(hosts []string) (*leastConnections, error) {
 
 func (lc *leastConnections) nextLeast() (*server, func(), error) {
 	var (
-		min = -1
+		min   = -1
 		index = 0
 	)
 	lc.mu.Lock()

@@ -14,6 +14,7 @@ import (
 	"github.com/KPI-KMD/lab3-term2/httptools"
 	"github.com/KPI-KMD/lab3-term2/signal"
 )
+
 var port = flag.Int("port", 8080, "server port")
 var db = flag.String("db", "http://database:8070/db/", "database url")
 
@@ -87,7 +88,7 @@ func main() {
 	t := time.Now().Format("2006-01-02")
 	body := []byte(fmt.Sprintf(`{"value": "%s"}`, t))
 	r, err := http.Post(
-		*db + "ovgb",
+		*db+"test1",
 		"application/json",
 		bytes.NewBuffer(body))
 	if err != nil {

@@ -44,13 +44,14 @@ go_tested_binary {
 // TODO: TASK4 LAB3.
 go_tested_binary {
   name: "db",
-  pkg: "github.com/KPI-KMD/lab3-term2/db",
+  pkg: "github.com/KPI-KMD/lab3-term2/cmd/db",
   srcs: [
       "httptools/**/*.go",
       "signal/**/*.go",
       "cmd/db/*.go",
     ],
-  testPkg: ".cmd/db/...",
+  testPkg: "cmd/db",
   srcsExclude: ["**/*_test.go"],
-  testSrcs: [".cmd/db/*_test.go"]
+  testSrcs: ["cmd/db/*_test.go"]
 }
+
