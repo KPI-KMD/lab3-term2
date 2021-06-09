@@ -17,8 +17,6 @@ const outFileName = "segment-"
 
 var tempDir string
 
-//var bufSize = 10485760
-
 var ErrNotFound = fmt.Errorf("record does not exist")
 var ErrWrongDataType = fmt.Errorf("wrong data type")
 
