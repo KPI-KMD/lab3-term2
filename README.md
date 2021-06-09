@@ -4,6 +4,6 @@ Fourth variant.</br>
 
 Team: 
 * Sapbyiev Maksym
-* Andreichenko Kyrylo
-* Kryshtal Dmytro</br>
+* Kryshtal Dmytro
+* Andreichenko Kyrylo</br>
 
