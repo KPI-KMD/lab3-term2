@@ -124,7 +124,7 @@ func (db *Db) mergeSegments() error {
 				}
 
 				reader := bufio.NewReader(file)
-				value, err := readValue(reader)
+				value, _, err := readValue(reader)
 				if err != nil {
 					return err
 				}
@@ -240,9 +240,7 @@ func (db *Db) Close() error {
 	return db.out.Close()
 }
 
-func (db *Db) Get(key string) (string, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+func (db *Db) get(key string) (string, string, error) {
 	var currentSegment *int
 	var file *os.File
 	var err error
@@ -251,7 +249,7 @@ func (db *Db) Get(key string) (string, error) {
 	if !ok {
 		currentSegment, position, ok = db.getLastFromSegments(key)
 		if !ok {
-			return "", ErrNotFound
+			return "", " ", ErrNotFound
 		}
 	}
 
@@ -261,37 +259,22 @@ func (db *Db) Get(key string) (string, error) {
 		file, err = os.Open(db.outPath)
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer file.Close()
 
 	_, err = file.Seek(position, 0)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	reader := bufio.NewReader(file)
-	value, err := readValue(reader)
+	value, typeOfValue, err := readValue(reader)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return value, nil
-}
-
-func (db *Db) Put(key, value string) error {
-	en := entry{
-		key:   key,
-		value: value,
-	}
-
-	i := entryWithResp{
-		e:        en,
-		response: make(chan error),
-	}
-
-	db.queue <- i
-	return <-i.response
+	return value, typeOfValue, nil
 }
 
 func (db *Db) putIntoDataBase(e entry) error {
@@ -359,10 +342,30 @@ func createNewSegment(outF *os.File, outPath string, outOffset int, index hashIn
 	return newSeg, nil
 }
 
+func (db *Db) Get(key string) (string, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	stringValue, typeOfValue, err := db.get(key)
+	if err != nil {
+		return "", err
+	}
+	if typeOfValue != "s" {
+		return "", ErrWrongDataType
+	}
+	return stringValue, nil
+
+}
 func (db *Db) GetInt64(key string) (int64, error) {
-	stringValue, err := db.Get(key)
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	stringValue, typeOfValue, err := db.get(key)
+
 	if err != nil {
 		return 0, err
+	}
+
+	if typeOfValue != "i" {
+		return 0, ErrWrongDataType
 	}
 
 	value, err := strconv.ParseInt(stringValue, 10, 64)
@@ -373,18 +376,33 @@ func (db *Db) GetInt64(key string) (int64, error) {
 	return value, nil
 }
 
-func (db *Db) PutInt64(key string, value int64) error {
-	e := entry{
+func (db *Db) Put(key, value string) error {
+	en := entry{
 		key:       key,
-		valueType: "int64",
+		valueType: "s",
+		value:     value,
+	}
+
+	i := entryWithResp{
+		e:        en,
+		response: make(chan error),
+	}
+
+	db.queue <- i
+	return <-i.response
+}
+func (db *Db) PutInt64(key string, value int64) error {
+	en := entry{
+		key:       key,
+		valueType: "i",
 		value:     strconv.FormatInt(value, 10),
 	}
 
-	n, err := db.out.Write(e.Encode())
-	if err == nil {
-		db.index[key] = db.outOffset
-		db.outOffset += int64(n)
+	i := entryWithResp{
+		e:        en,
+		response: make(chan error),
 	}
 
-	return err
+	db.queue <- i
+	return <-i.response
 }

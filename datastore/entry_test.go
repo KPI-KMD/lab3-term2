@@ -20,7 +20,7 @@ func TestEntry_Encode(t *testing.T) {
 func TestReadValue(t *testing.T) {
 	e := entry{"key", "string", "test-value"}
 	data := e.Encode()
-	v, err := readValue(bufio.NewReader(bytes.NewReader(data)))
+	v, _, err := readValue(bufio.NewReader(bytes.NewReader(data)))
 	if err != nil {
 		t.Fatal(err)
 	}

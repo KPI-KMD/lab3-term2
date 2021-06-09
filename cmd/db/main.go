@@ -37,7 +37,7 @@ func main() {
 			log.Printf("GET request for %s", k)
 			v, err := db.Get(k)
 			if err != nil {
-				log.Printf("Failed to get %s: %s", k, err)
+				//log.Printf("Failed to get %s: %s", k, err)
 				if err == datastore.ErrNotFound {
 					rw.WriteHeader(http.StatusNotFound)
 				} else if err == datastore.ErrWrongDataType {

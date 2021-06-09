@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 )
 
@@ -224,10 +223,10 @@ func TestDb_PutGetInt64(t *testing.T) {
 
 	defer db.Close()
 
-	pairsInt64 := [][]string{
-		{"key1", "111"},
-		{"key2", "222"},
-		{"key3", "333"},
+	pairsInt64 := map[string]int{
+		"key1": 1,
+		"key2": 2,
+		"key3": 3,
 	}
 	pairsNotInt64 := [][]string{
 		{"key5", "dsawqe"},
@@ -237,31 +236,43 @@ func TestDb_PutGetInt64(t *testing.T) {
 
 	t.Run("putInt64/getInt64", func(t *testing.T) {
 
-		for _, pair := range pairsInt64 {
-			val, err := strconv.ParseInt(pair[1], 10, 64)
+		for key, value := range pairsInt64 {
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = db.PutInt64(pair[0], val)
+			err = db.PutInt64(key, int64(value))
 			if err != nil {
-				t.Errorf("Cannot put %s: %s", pair[0], err)
+				t.Errorf("Cannot put %s: %s", key, err)
 			}
-			value, err := db.GetInt64(pair[0])
+			val, err := db.GetInt64(key)
 			if err != nil {
-				t.Errorf("Cannot get %s: %s", pair[0], err)
+				t.Errorf("Cannot get %s: %s", key, err)
 			}
-			if value != val {
-				t.Errorf("Bad value returned expected %s, got %s", pair[1], strconv.FormatInt(value, 10))
+			if val != int64(value) {
+				t.Errorf("Bad value returned expected %d, got %d", value, val)
 			}
 		}
 	})
 
 	t.Run("getInt64wrongtype", func(t *testing.T) {
 
-		notForInt64pair := pairsNotInt64[0]
-		res, err := db.GetInt64(notForInt64pair[0])
-		if err == nil {
-			t.Errorf("Expected error for key %s, but got %s", notForInt64pair[0], strconv.FormatInt(res, 10))
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
 		}
+		db, err = NewDb(currentFile, dir, 200, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, pair := range pairsNotInt64 {
+			err = db.Put(pair[0], pair[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err := db.GetInt64(pair[0])
+			if err != ErrWrongDataType {
+				t.Errorf("There was no expected error")
+			}
+		}
+
 	})
 }

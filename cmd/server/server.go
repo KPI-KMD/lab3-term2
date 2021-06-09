@@ -88,7 +88,7 @@ func main() {
 	t := time.Now().Format("2006-01-02")
 	body := []byte(fmt.Sprintf(`{"value": "%s"}`, t))
 	r, err := http.Post(
-		*db+"test1",
+		*db+"KPI-KMD",
 		"application/json",
 		bytes.NewBuffer(body))
 	if err != nil {
